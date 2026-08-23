@@ -1,0 +1,5 @@
+nemoguardrails==0.23.0
+requests>=2.31
+cryptography>=42
+python-dotenv>=1
+PyYAML>=6

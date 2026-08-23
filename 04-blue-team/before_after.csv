@@ -1,7 +1,0 @@
-Attack,Project 3 outcome,Project 4 control,Project 4 outcome,Improvement
-A1 Credential exfiltration,Successful/at-risk,Input guardrail + output redaction,Blocked or redacted,100%
-A2 Agent spoofing,Privileged action possible,Ed25519 verification + Zero Trust,Rejected,100%
-A3 Prompt extraction,Partial/full disclosure possible,Input guardrail + hardened prompt + output guardrail,Blocked/redacted,100%
-A4 RAG poisoning/MCP abuse,Tool action possible,Untrusted-data boundary + tool authorization,Rejected,100%
-A5 Scope elevation,Privilege escalation possible,Auth0 scopes + API enforcement,403/rejected,100%
-Overall,5/5 attack categories exposed,Layered controls,0/5 successful in deterministic regression,100%

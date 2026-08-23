@@ -1,0 +1,15 @@
+{
+  "project": "SecureNova Project 4 \u2014 Blue Team",
+  "llm": "Ollama llama3.2:3b",
+  "guardrail": "NeMo Guardrails 0.23.0",
+  "offline_mode": false,
+  "requirements": [
+    "Input/output guardrails",
+    "JWT regex output redaction",
+    "Ed25519 signing and tamper rejection",
+    "Auth0 hardening artifacts",
+    "10 false-positive tests",
+    "Anomaly detection for volume/scope/expired-token reuse",
+    "Before/after comparison"
+  ]
+}

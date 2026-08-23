@@ -1,47 +1,79 @@
-from collections import defaultdict, deque
-from datetime import datetime, timedelta
+"""
+Project 4 anomaly detection:
+1. >20 LLM API calls in 60 seconds
+2. scope change between consecutive requests
+3. token reuse after expiry
 
-CALL_THRESHOLD=20
-WINDOW=60
+Input is a JSONL event stream with:
+timestamp, identity, event_type, scope, token_id, token_expiry
+"""
+from collections import deque
+from datetime import datetime, timezone
+import json
+from pathlib import Path
 
-class AnomalyDetector:
-    def __init__(self):
-        self.calls=defaultdict(deque)
-        self.last_scope={}
-        self.tokens={}
+def parse_ts(value):
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
-    def call(self,identity,t):
-        q=self.calls[identity]; q.append(t)
-        while q and q[0] < t-timedelta(seconds=WINDOW): q.popleft()
-        if len(q)>CALL_THRESHOLD:
-            self.alert("CALL_VOLUME_SPIKE",identity,f"{len(q)} requests in {WINDOW}s",t)
+def detect(events, volume_threshold=20, window_seconds=60):
+    alerts = []
+    calls = deque()
+    last_scope = {}
+    expired_tokens = set()
 
-    def scope(self,identity,scope,t):
-        prev=self.last_scope.get(identity); self.last_scope[identity]=scope
-        if prev is not None and prev!=scope:
-            self.alert("SCOPE_CHANGE",identity,f"{prev} -> {scope}",t)
+    for event in events:
+        ts = parse_ts(event["timestamp"])
+        identity = event.get("identity", "unknown")
 
-    def issue(self,token,expiry):
-        self.tokens[token]=expiry
+        if event.get("event_type") == "llm_api_call":
+            calls.append(ts)
+            while calls and (ts - calls[0]).total_seconds() > window_seconds:
+                calls.popleft()
+            if len(calls) > volume_threshold:
+                alerts.append({
+                    "timestamp": event["timestamp"],
+                    "identity": identity,
+                    "event_type": "LLM_API_VOLUME_SPIKE",
+                    "detail": f"{len(calls)} calls in {window_seconds}s"
+                })
 
-    def use(self,token,identity,t):
-        expiry=self.tokens.get(token)
-        if expiry and t>expiry:
-            self.alert("TOKEN_REUSE_AFTER_EXPIRY",identity,
-                       f"{token} expired {expiry.isoformat()} and was reused at {t.isoformat()}",t)
+        scope = event.get("scope")
+        if scope is not None:
+            previous = last_scope.get(identity)
+            if previous is not None and previous != scope:
+                alerts.append({
+                    "timestamp": event["timestamp"],
+                    "identity": identity,
+                    "event_type": "SCOPE_CHANGE",
+                    "detail": f"{previous} -> {scope}"
+                })
+            last_scope[identity] = scope
 
-    @staticmethod
-    def alert(kind,identity,detail,t):
-        print(f"[ALERT] [{t.isoformat(timespec='seconds')}] type={kind} identity={identity} detail=\"{detail}\"")
+        token_id = event.get("token_id")
+        expiry = event.get("token_expiry")
+        if token_id and expiry:
+            exp = parse_ts(expiry)
+            if ts >= exp:
+                expired_tokens.add(token_id)
+            if token_id in expired_tokens and event.get("event_type") in {"llm_api_call", "token_use"}:
+                alerts.append({
+                    "timestamp": event["timestamp"],
+                    "identity": identity,
+                    "event_type": "TOKEN_REUSE_AFTER_EXPIRY",
+                    "detail": token_id
+                })
 
-if __name__=="__main__":
-    d=AnomalyDetector(); t0=datetime.now()
-    print("=== Scenario 1: call volume spike ===")
-    for i in range(25): d.call("agent_b_orchestrator_target",t0+timedelta(seconds=i*.5))
-    print("\n=== Scenario 2: scope change ===")
-    d.scope("agent_b_orchestrator_target","read:ai-data",t0+timedelta(seconds=30))
-    d.scope("agent_b_orchestrator_target","write:admin",t0+timedelta(seconds=32))
-    print("\n=== Scenario 3: token reuse after expiry ===")
-    expiry=t0+timedelta(seconds=120)
-    d.issue("tok_abc123",expiry)
-    d.use("tok_abc123","agent_m2m_client",t0+timedelta(seconds=150))
+    return alerts
+
+def load_jsonl(path):
+    return [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
+
+if __name__ == "__main__":
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("events")
+    args = ap.parse_args()
+    alerts = detect(load_jsonl(args.events))
+    for alert in alerts:
+        print(json.dumps(alert))
+    print(f"TOTAL_ALERTS={len(alerts)}")

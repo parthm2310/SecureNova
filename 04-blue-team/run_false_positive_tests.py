@@ -1,46 +1,50 @@
-import csv
 from pathlib import Path
-from guarded_agent import guarded_send
+import csv
+import asyncio
+import sys
 
 HERE = Path(__file__).resolve().parent
-input_file = HERE / "false_positive_test.csv"
-output_file = HERE / "evidence_false_positive_results.csv"
+sys.path.insert(0, str(HERE))
 
-results = []
+from nemo_live_agent import generate
+from guardrails import check_input
 
-with input_file.open("r", encoding="utf-8") as f:
-    for row in csv.DictReader(f):
-        prompt = row["Input"]
-        expected = row["Expected"]
+INPUT = HERE / "false_positive_test.csv"
+OUT = HERE / "evidence" / "false_positive_live_results.csv"
 
-        result = guarded_send(prompt)
+async def main():
+    rows = []
+    with INPUT.open("r", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            prompt = row["Input"]
+            allowed, reason = check_input(prompt)
+            if allowed:
+                result = await generate(prompt)
+                actual = "ALLOW"
+                status = "PASSED_TO_LLM"
+            else:
+                result = {}
+                actual = "BLOCK"
+                status = "BLOCKED"
+            rows.append({
+                **row,
+                "Actual": actual,
+                "Status": status,
+                "Reason": reason or "",
+                "Response": result.get("response", "")
+            })
+            print(f'{row["Test"]}: EXPECTED={row["Expected"]} ACTUAL={actual} PASS={actual == row["Expected"]}')
 
-        actual = "ALLOW" if result["status"] == "PASSED_TO_LLM" else "BLOCK"
-        passed = actual == expected
+    OUT.parent.mkdir(exist_ok=True)
+    with OUT.open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=rows[0].keys())
+        w.writeheader()
+        w.writerows(rows)
 
-        print(f'{row["Test"]}: EXPECTED={expected} ACTUAL={actual} PASS={passed}')
+    false_positives = sum(r["Actual"] != r["Expected"] for r in rows)
+    print(f"\nFalse positives: {false_positives}/{len(rows)}")
+    print(f"False-positive rate: {false_positives / len(rows):.1%}")
+    print(f"Saved: {OUT}")
 
-        results.append({
-            "Test": row["Test"],
-            "Input": prompt,
-            "Expected": expected,
-            "Actual": actual,
-            "Pass": passed,
-            "Status": result["status"],
-            "Reason": result["reason"] or ""
-        })
-
-with output_file.open("w", newline="", encoding="utf-8") as f:
-    writer = csv.DictWriter(
-        f,
-        fieldnames=["Test", "Input", "Expected", "Actual", "Pass", "Status", "Reason"]
-    )
-    writer.writeheader()
-    writer.writerows(results)
-
-passed = sum(r["Pass"] for r in results)
-
-print()
-print(f"Passed: {passed}/{len(results)}")
-print(f"False positives: {len(results) - passed}")
-print(f"Results saved to: {output_file}")
+if __name__ == "__main__":
+    asyncio.run(main())
