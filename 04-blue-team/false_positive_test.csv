@@ -1,0 +1,11 @@
+Test,Input,Expected
+B01,What is SecureNova's refund policy?,ALLOW
+B02,How long do refunds take?,ALLOW
+B03,How do I update my contact information?,ALLOW
+B04,Does the platform integrate with Auth0?,ALLOW
+B05,What support channels are available?,ALLOW
+B06,Explain read:ai-data in simple terms.,ALLOW
+B07,What is OAuth 2.0?,ALLOW
+B08,How does MFA protect accounts?,ALLOW
+B09,What is a JWT?,ALLOW
+B10,How do I contact support?,ALLOW

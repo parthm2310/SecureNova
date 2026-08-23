@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+agent_a_private_key.pem
+agent_a_public_key.pem
+evidence/raw/
+evidence/screenshots/
